@@ -1,24 +1,57 @@
 // Timer storage
 let timers = [];
 let checkInterval = null;
+let settings = {};
+
+// Default settings
+const DEFAULT_SETTINGS = {
+  typingSpeed: 50,
+  postTextEntryDelay: 10,
+  triggerFocusBlur: true,
+  autoDeleteExecuted: 'never',
+  notifySuccess: true,
+  notifyFailure: true,
+  defaultEventType: 'enterText',
+  defaultPersistence: 'session',
+  defaultUrlBehavior: 'cancel',
+  timerListView: 'detailed',
+  theme: 'light'
+};
 
 // Initialize on startup
 browser.runtime.onStartup.addListener(async () => {
+  await loadSettings();
   await loadTimersFromStorage();
   startTimerChecker();
+  startAutoDeleteChecker();
 });
 
 // Initialize on install
 browser.runtime.onInstalled.addListener(async () => {
+  await loadSettings();
   await loadTimersFromStorage();
   startTimerChecker();
+  startAutoDeleteChecker();
 });
 
-// Load timers from storage on script load
+// Load on script load
 (async () => {
+  await loadSettings();
   await loadTimersFromStorage();
   startTimerChecker();
+  startAutoDeleteChecker();
 })();
+
+// Load settings from storage
+async function loadSettings() {
+  try {
+    const data = await browser.storage.local.get('settings');
+    settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
+  } catch (error) {
+    console.error('Error loading settings:', error);
+    settings = { ...DEFAULT_SETTINGS };
+  }
+}
 
 // Load timers from browser storage
 async function loadTimersFromStorage() {
@@ -36,10 +69,16 @@ async function loadTimersFromStorage() {
     
     // Clean up expired or invalid timers
     timers = timers.filter(timer => {
-      // Remove executed timers older than 1 hour
-      if (timer.status !== 'pending' && Date.now() - timer.targetTime > 3600000) {
-        return false;
+      // Keep pending timers
+      if (timer.status === 'pending') {
+        return true;
       }
+      
+      // Remove old executed timers based on auto-delete setting
+      if (timer.status !== 'pending') {
+        return !shouldAutoDelete(timer);
+      }
+      
       return true;
     });
     
@@ -62,6 +101,49 @@ async function loadTimersFromStorage() {
     console.error('Error loading timers:', error);
     timers = [];
   }
+}
+
+// Check if a timer should be auto-deleted
+function shouldAutoDelete(timer) {
+  if (!timer.executedAt) {
+    timer.executedAt = timer.targetTime; // Fallback
+  }
+  
+  const now = Date.now();
+  const timeSinceExecution = now - timer.executedAt;
+  
+  switch (settings.autoDeleteExecuted) {
+    case '5min':
+      return timeSinceExecution > 5 * 60 * 1000;
+    case '30min':
+      return timeSinceExecution > 30 * 60 * 1000;
+    case '1hour':
+      return timeSinceExecution > 60 * 60 * 1000;
+    case '24hours':
+      return timeSinceExecution > 24 * 60 * 60 * 1000;
+    case 'never':
+    default:
+      return false;
+  }
+}
+
+// Start auto-delete checker
+function startAutoDeleteChecker() {
+  // Check every minute for timers to auto-delete
+  setInterval(async () => {
+    const initialLength = timers.length;
+    timers = timers.filter(timer => {
+      if (timer.status !== 'pending') {
+        return !shouldAutoDelete(timer);
+      }
+      return true;
+    });
+    
+    if (timers.length !== initialLength) {
+      await saveTimersToStorage();
+      notifyPopups('timerUpdated');
+    }
+  }, 60000); // Check every minute
 }
 
 // Save timers to storage based on persistence level
@@ -93,12 +175,16 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
       return await addTimer(message.timer);
     case 'updateTimer':
       return await updateTimer(message.timer);
+    case 'updateAllTimers':
+      return await updateAllTimers(message.timers);
     case 'cancelTimer':
       return await cancelTimer(message.timerId);
     case 'getTimers':
       return { timers: timers };
-    case 'clickResult':
-      return await handleClickResult(message.timerId, message.success);
+    case 'settingsUpdated':
+      settings = message.settings;
+      await loadSettings(); // Reload to ensure consistency
+      return { success: true };
     default:
       return { success: false, error: 'Unknown action' };
   }
@@ -122,6 +208,14 @@ async function updateTimer(timerData) {
     return { success: true };
   }
   return { success: false, error: 'Timer not found' };
+}
+
+// Update all timers (for applying default settings)
+async function updateAllTimers(updatedTimers) {
+  timers = updatedTimers;
+  await saveTimersToStorage();
+  notifyPopups('timerUpdated');
+  return { success: true };
 }
 
 // Cancel timer
@@ -165,11 +259,15 @@ async function executeTimer(timer) {
     } catch (error) {
       // Tab doesn't exist
       timer.status = 'executed-failure';
+      timer.executedAt = Date.now();
       await saveTimersToStorage();
-      await showNotification(
-        'Timer Cancelled',
-        `Timer cancelled - tab was closed: ${timer.tabTitle}`
-      );
+      
+      if (settings.notifyFailure) {
+        await showNotification(
+          'Timer Cancelled',
+          `Timer cancelled - tab was closed: ${timer.tabTitle}`
+        );
+      }
       notifyPopups('timerExecuted');
       return;
     }
@@ -180,11 +278,15 @@ async function executeTimer(timer) {
     if (urlChanged && timer.urlBehavior === 'cancel') {
       // Cancel timer if URL changed and behavior is "don't run"
       timer.status = 'executed-failure';
+      timer.executedAt = Date.now();
       await saveTimersToStorage();
-      await showNotification(
-        'Timer Cancelled',
-        `Timer cancelled - URL changed on: ${timer.tabTitle}`
-      );
+      
+      if (settings.notifyFailure) {
+        await showNotification(
+          'Timer Cancelled',
+          `Timer cancelled - URL changed on: ${timer.tabTitle}`
+        );
+      }
       notifyPopups('timerExecuted');
       return;
     }
@@ -209,21 +311,42 @@ async function executeTimer(timer) {
       targetTab = await browser.tabs.get(timer.tabId);
     }
     
-    // Execute click on the target tab
-    const success = await clickElement(targetTab.id, timer.cssSelector);
+    // Execute action based on event type
+    let success = false;
+    
+    if (timer.eventType === 'click') {
+      success = await clickElement(targetTab.id, timer.cssSelector);
+    } else if (timer.eventType === 'enterText') {
+      success = await enterTextInElement(targetTab.id, timer.cssSelector, timer.textToEnter, {
+        clearBeforeTyping: timer.clearBeforeTyping,
+        typingSpeed: settings.typingSpeed,
+        postTextEntryDelay: settings.postTextEntryDelay,
+        triggerFocusBlur: settings.triggerFocusBlur
+      });
+    }
     
     if (success) {
       timer.status = 'executed-success';
-      await showNotification(
-        'Timer Executed Successfully',
-        `Clicked element on: ${timer.tabTitle}`
-      );
+      timer.executedAt = Date.now();
+      
+      if (settings.notifySuccess) {
+        const actionText = timer.eventType === 'enterText' ? 'Entered text on' : 'Clicked element on';
+        await showNotification(
+          'Timer Executed Successfully',
+          `${actionText}: ${timer.tabTitle}`
+        );
+      }
     } else {
       timer.status = 'executed-failure';
-      await showNotification(
-        'Element Not Found',
-        `Could not find element on: ${timer.tabTitle}`
-      );
+      timer.executedAt = Date.now();
+      
+      if (settings.notifyFailure) {
+        const actionText = timer.eventType === 'enterText' ? 'input field' : 'element';
+        await showNotification(
+          'Element Not Found',
+          `Could not find ${actionText} on: ${timer.tabTitle}`
+        );
+      }
     }
     
     await saveTimersToStorage();
@@ -232,11 +355,15 @@ async function executeTimer(timer) {
   } catch (error) {
     console.error('Error executing timer:', error);
     timer.status = 'executed-failure';
+    timer.executedAt = Date.now();
     await saveTimersToStorage();
-    await showNotification(
-      'Timer Execution Failed',
-      `Error executing timer on: ${timer.tabTitle}`
-    );
+    
+    if (settings.notifyFailure) {
+      await showNotification(
+        'Timer Execution Failed',
+        `Error executing timer on: ${timer.tabTitle}`
+      );
+    }
     notifyPopups('timerExecuted');
   }
 }
@@ -273,6 +400,23 @@ async function clickElement(tabId, cssSelector) {
     return response && response.success;
   } catch (error) {
     console.error('Error clicking element:', error);
+    return false;
+  }
+}
+
+// Enter text into element via content script
+async function enterTextInElement(tabId, cssSelector, text, settings) {
+  try {
+    const response = await browser.tabs.sendMessage(tabId, {
+      action: 'enterText',
+      selector: cssSelector,
+      text: text,
+      settings: settings
+    });
+    
+    return response && response.success;
+  } catch (error) {
+    console.error('Error entering text:', error);
     return false;
   }
 }
