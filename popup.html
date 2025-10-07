@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Element Click Timer</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Timer Creation Form -->
+    <div class="form-section">
+      <h2 id="form-title">Add Timer</h2>
+      
+      <div class="form-group">
+        <label for="css-selector">CSS Selector:</label>
+        <input type="text" id="css-selector" placeholder='button[aria-label="Continue"]' value='button[aria-label="Continue"]'>
+      </div>
+      
+      <div class="form-group">
+        <label>Target Time:</label>
+        <div class="time-picker">
+          <select id="hours">
+            <!-- Populated by JavaScript -->
+          </select>
+          <span>:</span>
+          <select id="minutes">
+            <!-- Populated by JavaScript -->
+          </select>
+        </div>
+        <small class="help-text">Timer will fire 5 minutes after selected time</small>
+      </div>
+      
+      <div class="form-group">
+        <label>Persistence:</label>
+        <div class="radio-group">
+          <label class="radio-label">
+            <input type="radio" name="persistence" value="session" checked>
+            <span>Session only</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="persistence" value="tab">
+            <span>Persist on tab close</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="persistence" value="browser">
+            <span>Persist on browser close</span>
+          </label>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label>If URL Changes:</label>
+        <div class="radio-group">
+          <label class="radio-label">
+            <input type="radio" name="url-behavior" value="cancel" checked>
+            <span>Don't run</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="url-behavior" value="new-tab">
+            <span>Open new tab</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="url-behavior" value="navigate">
+            <span>Navigate existing tab</span>
+          </label>
+        </div>
+      </div>
+      
+      <div class="form-actions">
+        <button id="submit-btn" class="btn btn-primary">Add Timer</button>
+        <button id="cancel-edit-btn" class="btn btn-secondary" style="display: none;">Cancel</button>
+      </div>
+    </div>
+    
+    <!-- Timer List -->
+    <div class="timer-list-section">
+      <h3>Active Timers</h3>
+      <div id="timer-list" class="timer-list">
+        <p class="empty-state">No active timers</p>
+      </div>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
