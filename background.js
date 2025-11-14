@@ -1,7 +1,10 @@
 // Timer storage
 let timers = [];
 let checkInterval = null;
+let autoDeleteInterval = null;
 let settings = {};
+let isInitialized = false;
+let executingTimers = new Set(); // Track timers currently being executed
 
 // Default settings
 const DEFAULT_SETTINGS = {
@@ -18,28 +21,35 @@ const DEFAULT_SETTINGS = {
   theme: 'light'
 };
 
-// Initialize on startup
-browser.runtime.onStartup.addListener(async () => {
+// Initialize extension (called once)
+async function initialize() {
+  if (isInitialized) {
+    console.log('Extension already initialized, skipping...');
+    return;
+  }
+
+  isInitialized = true;
+  console.log('Initializing extension...');
+
   await loadSettings();
   await loadTimersFromStorage();
   startTimerChecker();
   startAutoDeleteChecker();
+}
+
+// Initialize on startup
+browser.runtime.onStartup.addListener(async () => {
+  await initialize();
 });
 
 // Initialize on install
 browser.runtime.onInstalled.addListener(async () => {
-  await loadSettings();
-  await loadTimersFromStorage();
-  startTimerChecker();
-  startAutoDeleteChecker();
+  await initialize();
 });
 
 // Load on script load
 (async () => {
-  await loadSettings();
-  await loadTimersFromStorage();
-  startTimerChecker();
-  startAutoDeleteChecker();
+  await initialize();
 })();
 
 // Load settings from storage
@@ -59,11 +69,14 @@ async function loadTimersFromStorage() {
     // Load from local storage (persistent)
     const localData = await browser.storage.local.get('timers');
     const persistentTimers = localData.timers || [];
-    
+
     // Load from session storage (session only)
-    const sessionData = await browser.storage.session?.get('timers') || { timers: [] };
-    const sessionTimers = sessionData.timers || [];
-    
+    let sessionTimers = [];
+    if (browser.storage.session) {
+      const sessionData = await browser.storage.session.get('timers');
+      sessionTimers = sessionData?.timers || [];
+    }
+
     // Combine timers
     timers = [...persistentTimers, ...sessionTimers];
     
@@ -105,13 +118,12 @@ async function loadTimersFromStorage() {
 
 // Check if a timer should be auto-deleted
 function shouldAutoDelete(timer) {
-  if (!timer.executedAt) {
-    timer.executedAt = timer.targetTime; // Fallback
-  }
-  
+  // Use executedAt if exists, otherwise use targetTime as fallback (without modifying timer)
+  const executionTime = timer.executedAt || timer.targetTime;
+
   const now = Date.now();
-  const timeSinceExecution = now - timer.executedAt;
-  
+  const timeSinceExecution = now - executionTime;
+
   switch (settings.autoDeleteExecuted) {
     case '5min':
       return timeSinceExecution > 5 * 60 * 1000;
@@ -129,8 +141,13 @@ function shouldAutoDelete(timer) {
 
 // Start auto-delete checker
 function startAutoDeleteChecker() {
+  // Clear existing interval if any
+  if (autoDeleteInterval) {
+    clearInterval(autoDeleteInterval);
+  }
+
   // Check every minute for timers to auto-delete
-  setInterval(async () => {
+  autoDeleteInterval = setInterval(async () => {
     const initialLength = timers.length;
     timers = timers.filter(timer => {
       if (timer.status !== 'pending') {
@@ -138,7 +155,7 @@ function startAutoDeleteChecker() {
       }
       return true;
     });
-    
+
     if (timers.length !== initialLength) {
       await saveTimersToStorage();
       notifyPopups('timerUpdated');
@@ -241,10 +258,22 @@ function startTimerChecker() {
 // Check if any timers should fire and execute them
 async function checkAndExecuteTimers() {
   const now = Date.now();
-  
+
   for (const timer of timers) {
+    // Skip if already executing (prevent concurrent execution)
+    if (executingTimers.has(timer.id)) {
+      continue;
+    }
+
     if (timer.status === 'pending' && timer.targetTime <= now) {
-      await executeTimer(timer);
+      // Mark as executing
+      executingTimers.add(timer.id);
+
+      // Execute timer (don't await to allow parallel execution of different timers)
+      executeTimer(timer).finally(() => {
+        // Remove from executing set when done
+        executingTimers.delete(timer.id);
+      });
     }
   }
 }
@@ -371,19 +400,32 @@ async function executeTimer(timer) {
 // Wait for tab to finish loading
 function waitForTabLoad(tabId) {
   return new Promise((resolve) => {
+    let timeoutId = null;
+    let resolved = false;
+
+    const cleanup = () => {
+      if (!resolved) {
+        resolved = true;
+        browser.tabs.onUpdated.removeListener(listener);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      }
+    };
+
     const listener = (updatedTabId, changeInfo) => {
       if (updatedTabId === tabId && changeInfo.status === 'complete') {
-        browser.tabs.onUpdated.removeListener(listener);
+        cleanup();
         // Add extra delay to ensure page is fully ready
         setTimeout(resolve, 1000);
       }
     };
-    
+
     browser.tabs.onUpdated.addListener(listener);
-    
+
     // Timeout after 30 seconds
-    setTimeout(() => {
-      browser.tabs.onUpdated.removeListener(listener);
+    timeoutId = setTimeout(() => {
+      cleanup();
       resolve();
     }, 30000);
   });
@@ -396,10 +438,26 @@ async function clickElement(tabId, cssSelector) {
       action: 'clickElement',
       selector: cssSelector
     });
-    
+
     return response && response.success;
   } catch (error) {
     console.error('Error clicking element:', error);
+    // Check if error is due to content script not being injected
+    if (error.message && error.message.includes('Could not establish connection')) {
+      console.error('Content script may not be injected yet. Trying to wait...');
+      // Wait a bit and retry once
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      try {
+        const retryResponse = await browser.tabs.sendMessage(tabId, {
+          action: 'clickElement',
+          selector: cssSelector
+        });
+        return retryResponse && retryResponse.success;
+      } catch (retryError) {
+        console.error('Retry also failed:', retryError);
+        return false;
+      }
+    }
     return false;
   }
 }
@@ -413,10 +471,28 @@ async function enterTextInElement(tabId, cssSelector, text, settings) {
       text: text,
       settings: settings
     });
-    
+
     return response && response.success;
   } catch (error) {
     console.error('Error entering text:', error);
+    // Check if error is due to content script not being injected
+    if (error.message && error.message.includes('Could not establish connection')) {
+      console.error('Content script may not be injected yet. Trying to wait...');
+      // Wait a bit and retry once
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      try {
+        const retryResponse = await browser.tabs.sendMessage(tabId, {
+          action: 'enterText',
+          selector: cssSelector,
+          text: text,
+          settings: settings
+        });
+        return retryResponse && retryResponse.success;
+      } catch (retryError) {
+        console.error('Retry also failed:', retryError);
+        return false;
+      }
+    }
     return false;
   }
 }

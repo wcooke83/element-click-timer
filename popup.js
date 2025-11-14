@@ -23,6 +23,7 @@ const DEFAULT_SETTINGS = {
 // Initialize popup
 document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();
+  await loadTextVisibilityState();
   await applyTheme();
   await initializeTimeSelectors();
   await loadCurrentTab();
@@ -42,6 +43,37 @@ async function loadSettings() {
   } catch (error) {
     console.error('Error loading settings:', error);
     settings = { ...DEFAULT_SETTINGS };
+  }
+}
+
+// Load text visibility state from storage
+async function loadTextVisibilityState() {
+  try {
+    // Try session storage first, fallback to localStorage
+    if (browser.storage.session) {
+      const data = await browser.storage.session.get('textVisibilityState');
+      textVisibilityState = data?.textVisibilityState || {};
+    } else {
+      const stored = localStorage.getItem('textVisibilityState');
+      textVisibilityState = stored ? JSON.parse(stored) : {};
+    }
+  } catch (error) {
+    console.error('Error loading text visibility state:', error);
+    textVisibilityState = {};
+  }
+}
+
+// Save text visibility state to storage
+async function saveTextVisibilityState() {
+  try {
+    // Try session storage first, fallback to localStorage
+    if (browser.storage.session) {
+      await browser.storage.session.set({ textVisibilityState });
+    } else {
+      localStorage.setItem('textVisibilityState', JSON.stringify(textVisibilityState));
+    }
+  } catch (error) {
+    console.error('Error saving text visibility state:', error);
   }
 }
 
@@ -103,31 +135,11 @@ function applyTimerListView() {
 }
 
 // Apply defaults to existing pending timers
+// NOTE: This function has been removed to prevent unintended modification of existing timers
+// Default settings should only apply to NEW timers, not existing ones
 async function applyDefaultsToExistingTimers() {
-  const response = await browser.runtime.sendMessage({ action: 'getTimers' });
-  const timers = response.timers || [];
-  
-  let updated = false;
-  for (const timer of timers) {
-    if (timer.status === 'pending') {
-      if (timer.persistence !== settings.defaultPersistence) {
-        timer.persistence = settings.defaultPersistence;
-        updated = true;
-      }
-      if (timer.urlBehavior !== settings.defaultUrlBehavior) {
-        timer.urlBehavior = settings.defaultUrlBehavior;
-        updated = true;
-      }
-    }
-  }
-  
-  if (updated) {
-    await browser.runtime.sendMessage({
-      action: 'updateAllTimers',
-      timers: timers
-    });
-    await loadTimers();
-  }
+  // Do nothing - defaults only apply to new timers created after settings change
+  // Existing timers should keep their original persistence and URL behavior settings
 }
 
 // Populate settings form with current values
@@ -160,12 +172,20 @@ function showSaveConfirmation() {
 
 // Apply default settings to form
 function applyDefaultSettings() {
-  document.querySelector(`input[name="event-type"][value="${settings.defaultEventType}"]`).checked = true;
-  document.querySelector(`input[name="persistence"][value="${settings.defaultPersistence}"]`).checked = true;
-  document.querySelector(`input[name="url-behavior"][value="${settings.defaultUrlBehavior}"]`).checked = true;
-  
-  // Update form visibility based on default event type
-  updateFormVisibility();
+  try {
+    const eventTypeRadio = document.querySelector(`input[name="event-type"][value="${settings.defaultEventType}"]`);
+    const persistenceRadio = document.querySelector(`input[name="persistence"][value="${settings.defaultPersistence}"]`);
+    const urlBehaviorRadio = document.querySelector(`input[name="url-behavior"][value="${settings.defaultUrlBehavior}"]`);
+
+    if (eventTypeRadio) eventTypeRadio.checked = true;
+    if (persistenceRadio) persistenceRadio.checked = true;
+    if (urlBehaviorRadio) urlBehaviorRadio.checked = true;
+
+    // Update form visibility based on default event type
+    updateFormVisibility();
+  } catch (error) {
+    console.error('Error applying default settings:', error);
+  }
 }
 
 // Update form field visibility based on event type
@@ -340,16 +360,16 @@ async function handleSubmit() {
   }
   
   // Calculate target time (add 5 minutes to selected time)
+  const now = new Date();
   const selectedTime = new Date();
   selectedTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-  
-  const targetTime = new Date(selectedTime.getTime() + 5 * 60 * 1000);
-  
-  // If target time has passed today, schedule for tomorrow
-  const now = new Date();
-  if (targetTime <= now) {
-    targetTime.setDate(targetTime.getDate() + 1);
+
+  // If selected time has already passed today, schedule for tomorrow
+  if (selectedTime <= now) {
+    selectedTime.setDate(selectedTime.getDate() + 1);
   }
+
+  const targetTime = new Date(selectedTime.getTime() + 5 * 60 * 1000);
   
   const timerData = {
     id: currentEditingTimerId || generateTimerId(),
@@ -390,7 +410,7 @@ function isSelectorSensitive(selector) {
 
 // Generate unique timer ID
 function generateTimerId() {
-  return 'timer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  return 'timer_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
 }
 
 // Load and display all timers
@@ -543,13 +563,16 @@ function createTimerElement(timer) {
     details.appendChild(modeText);
   }
   
-  // Check if URL has changed
+  div.appendChild(header);
+  div.appendChild(details);
+
+  // Check if URL has changed (after element is constructed)
   if (timer.status === 'pending') {
     checkUrlStatus(timer).then(urlStatus => {
       if (urlStatus.changed) {
         const urlStatusDiv = document.createElement('div');
         urlStatusDiv.className = 'url-status warning';
-        
+
         if (timer.urlBehavior === 'cancel') {
           urlStatusDiv.textContent = '⚠️ URL changed - will not run';
         } else if (timer.urlBehavior === 'new-tab') {
@@ -559,21 +582,24 @@ function createTimerElement(timer) {
           urlStatusDiv.className = 'url-status info';
           urlStatusDiv.textContent = '🔄 Will navigate to original URL';
         }
-        
-        details.appendChild(urlStatusDiv);
+
+        // Append to details if div is still in the DOM
+        if (div.parentNode && details.parentNode) {
+          details.appendChild(urlStatusDiv);
+        }
       }
+    }).catch(error => {
+      console.error('Error checking URL status:', error);
     });
   }
-  
-  div.appendChild(header);
-  div.appendChild(details);
-  
+
   return div;
 }
 
 // Toggle sensitive text visibility
-function toggleSensitiveText(timerId) {
+async function toggleSensitiveText(timerId) {
   textVisibilityState[timerId] = !textVisibilityState[timerId];
+  await saveTextVisibilityState();
   loadTimers();
 }
 
@@ -609,6 +635,11 @@ function updateCountdown(element, targetTime) {
 
 // Start updating all countdowns every second
 function startTimerUpdates() {
+  // Clear existing interval if any
+  if (updateInterval) {
+    clearInterval(updateInterval);
+  }
+
   updateInterval = setInterval(() => {
     const countdowns = document.querySelectorAll('.timer-countdown');
     countdowns.forEach(countdown => {
@@ -672,22 +703,36 @@ function resetForm() {
   document.getElementById('form-title').textContent = 'Add Timer';
   document.getElementById('submit-btn').textContent = 'Add Timer';
   document.getElementById('cancel-edit-btn').style.display = 'none';
-  
-  // Reset to defaults
-  document.querySelector(`input[name="event-type"][value="${settings.defaultEventType}"]`).checked = true;
-  updateFormVisibility();
-  
-  document.getElementById('css-selector').value = settings.defaultEventType === 'enterText' ? 'input#username' : 'button[aria-label="Continue"]';
-  document.getElementById('text-to-enter').value = '';
-  document.getElementById('mark-sensitive').checked = false;
-  document.querySelector('input[name="text-mode"][value="clear"]').checked = true;
-  
-  const now = new Date();
-  document.getElementById('hours').value = now.getHours().toString().padStart(2, '0');
-  document.getElementById('minutes').value = now.getMinutes().toString().padStart(2, '0');
-  
-  document.querySelector(`input[name="persistence"][value="${settings.defaultPersistence}"]`).checked = true;
-  document.querySelector(`input[name="url-behavior"][value="${settings.defaultUrlBehavior}"]`).checked = true;
+
+  try {
+    // Reset to defaults (with error handling in case settings not loaded)
+    const defaultEventType = settings.defaultEventType || 'enterText';
+    const defaultPersistence = settings.defaultPersistence || 'session';
+    const defaultUrlBehavior = settings.defaultUrlBehavior || 'cancel';
+
+    const eventTypeRadio = document.querySelector(`input[name="event-type"][value="${defaultEventType}"]`);
+    if (eventTypeRadio) eventTypeRadio.checked = true;
+    updateFormVisibility();
+
+    document.getElementById('css-selector').value = defaultEventType === 'enterText' ? 'input#username' : 'button[aria-label="Continue"]';
+    document.getElementById('text-to-enter').value = '';
+    document.getElementById('mark-sensitive').checked = false;
+
+    const clearModeRadio = document.querySelector('input[name="text-mode"][value="clear"]');
+    if (clearModeRadio) clearModeRadio.checked = true;
+
+    const now = new Date();
+    document.getElementById('hours').value = now.getHours().toString().padStart(2, '0');
+    document.getElementById('minutes').value = now.getMinutes().toString().padStart(2, '0');
+
+    const persistenceRadio = document.querySelector(`input[name="persistence"][value="${defaultPersistence}"]`);
+    if (persistenceRadio) persistenceRadio.checked = true;
+
+    const urlBehaviorRadio = document.querySelector(`input[name="url-behavior"][value="${defaultUrlBehavior}"]`);
+    if (urlBehaviorRadio) urlBehaviorRadio.checked = true;
+  } catch (error) {
+    console.error('Error resetting form:', error);
+  }
 }
 
 // Cancel/remove timer
