@@ -35,6 +35,7 @@ const DEFAULT_SETTINGS = {
 document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();
   await loadAdvancedSettings();
+  await loadTextVisibilityState();
   await applyTheme();
   await initializeTimeSelectors();
   await initializeDailyTimeSelectors();
@@ -103,7 +104,38 @@ function populateAdvancedForm() {
   document.querySelector(`input[name="adv-url-behavior"][value="${advancedSettings.urlBehavior}"]`).checked = true;
 }
 
-// Save settings
+// Load text visibility state from storage
+async function loadTextVisibilityState() {
+  try {
+    // Try session storage first, fallback to localStorage
+    if (browser.storage.session) {
+      const data = await browser.storage.session.get('textVisibilityState');
+      textVisibilityState = data?.textVisibilityState || {};
+    } else {
+      const stored = localStorage.getItem('textVisibilityState');
+      textVisibilityState = stored ? JSON.parse(stored) : {};
+    }
+  } catch (error) {
+    console.error('Error loading text visibility state:', error);
+    textVisibilityState = {};
+  }
+}
+
+// Save text visibility state to storage
+async function saveTextVisibilityState() {
+  try {
+    // Try session storage first, fallback to localStorage
+    if (browser.storage.session) {
+      await browser.storage.session.set({ textVisibilityState });
+    } else {
+      localStorage.setItem('textVisibilityState', JSON.stringify(textVisibilityState));
+    }
+  } catch (error) {
+    console.error('Error saving text visibility state:', error);
+  }
+}
+
+// Save settings to storage
 async function saveSettings() {
   try {
     await browser.storage.local.set({ settings });
@@ -152,7 +184,15 @@ function applyTimerListView() {
   }
 }
 
-// Populate settings form
+// Apply defaults to existing pending timers
+// NOTE: This function has been removed to prevent unintended modification of existing timers
+// Default settings should only apply to NEW timers, not existing ones
+async function applyDefaultsToExistingTimers() {
+  // Do nothing - defaults only apply to new timers created after settings change
+  // Existing timers should keep their original persistence and URL behavior settings
+}
+
+// Populate settings form with current values
 function populateSettingsForm() {
   document.getElementById('typing-speed').value = settings.typingSpeed;
   document.getElementById('post-entry-delay').value = settings.postTextEntryDelay;
@@ -189,9 +229,18 @@ function showSaveConfirmation(btnId) {
 
 // Apply default settings
 function applyDefaultSettings() {
-  document.querySelector(`input[name="event-type"][value="${settings.defaultEventType}"]`).checked = true;
-  document.querySelector(`input[name="text-entry-method"][value="${settings.defaultTextEntryMethod}"]`).checked = true;
-  updateFormVisibility();
+  try {
+    const eventTypeRadio = document.querySelector(`input[name="event-type"][value="${settings.defaultEventType}"]`);
+    const textEntryMethodRadio = document.querySelector(`input[name="text-entry-method"][value="${settings.defaultTextEntryMethod}"]`);
+
+    if (eventTypeRadio) eventTypeRadio.checked = true;
+    if (textEntryMethodRadio) textEntryMethodRadio.checked = true;
+
+    // Update form visibility based on default event type
+    updateFormVisibility();
+  } catch (error) {
+    console.error('Error applying default settings:', error);
+  }
 }
 
 // Update form visibility based on action type
@@ -608,7 +657,7 @@ async function handleSubmit() {
   let targetTime;
   let dailyTime = null;
   let intervalMs = null;
-  
+
   if (scheduleType === 'once-off') {
     if (timingMethod === 'at-time') {
       // At specific date/time
@@ -616,12 +665,12 @@ async function handleSubmit() {
       const hours = document.getElementById('hours').value;
       const minutes = document.getElementById('minutes').value;
       const seconds = document.getElementById('seconds').value;
-      
+
       if (!targetDate) {
         alert('Please select a target date');
         return;
       }
-      
+
       const [year, month, day] = targetDate.split('-').map(Number);
       targetTime = new Date(year, month - 1, day, parseInt(hours), parseInt(minutes), parseInt(seconds), 0).getTime();
     } else {
@@ -629,12 +678,12 @@ async function handleSubmit() {
       const delayHours = parseInt(document.getElementById('delay-hours').value) || 0;
       const delayMinutes = parseInt(document.getElementById('delay-minutes').value) || 0;
       const delaySeconds = parseInt(document.getElementById('delay-seconds').value) || 0;
-      
+
       if (delayHours === 0 && delayMinutes === 0 && delaySeconds === 0) {
         alert('Please specify a delay greater than 0');
         return;
       }
-      
+
       const delayMs = (delayHours * 3600 + delayMinutes * 60 + delaySeconds) * 1000;
       targetTime = Date.now() + delayMs;
     }
@@ -645,14 +694,14 @@ async function handleSubmit() {
       const dailyHours = document.getElementById('daily-hours').value;
       const dailyMinutes = document.getElementById('daily-minutes').value;
       const dailySeconds = document.getElementById('daily-seconds').value;
-      
+
       dailyTime = `${dailyHours}:${dailyMinutes}:${dailySeconds}`;
-      
+
       // Calculate first execution time (today or tomorrow)
       const now = new Date();
-      const todayExecution = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 
+      const todayExecution = new Date(now.getFullYear(), now.getMonth(), now.getDate(),
                                        parseInt(dailyHours), parseInt(dailyMinutes), parseInt(dailySeconds), 0);
-      
+
       if (todayExecution.getTime() > now.getTime()) {
         targetTime = todayExecution.getTime();
       } else {
@@ -665,25 +714,25 @@ async function handleSubmit() {
       const delayHours = parseInt(document.getElementById('delay-hours').value) || 0;
       const delayMinutes = parseInt(document.getElementById('delay-minutes').value) || 0;
       const delaySeconds = parseInt(document.getElementById('delay-seconds').value) || 0;
-      
+
       if (delayHours === 0 && delayMinutes === 0 && delaySeconds === 0) {
         alert('Please specify an interval greater than 0');
         return;
       }
-      
+
       intervalMs = (delayHours * 3600 + delayMinutes * 60 + delaySeconds) * 1000;
       targetTime = Date.now() + intervalMs;
     }
   }
-  
+
   // Get repeat limit settings for recurring events
   let repeatLimit = 'indefinitely';
   let repeatTimes = null;
   let repeatUntilDate = null;
-  
+
   if (scheduleType === 'recurring') {
     repeatLimit = document.querySelector('input[name="repeat-limit"]:checked').value;
-    
+
     if (repeatLimit === 'times') {
       repeatTimes = parseInt(document.getElementById('repeat-times').value);
       if (!repeatTimes || repeatTimes < 1) {
@@ -697,7 +746,7 @@ async function handleSubmit() {
         return;
       }
       repeatUntilDate = new Date(untilDateStr).getTime();
-      
+
       if (repeatUntilDate <= Date.now()) {
         alert('End date must be in the future');
         return;
@@ -793,7 +842,7 @@ function isSelectorSensitive(selector) {
 
 // Generate unique IDs
 function generateTimerId() {
-  return 'timer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  return 'timer_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
 }
 
 function generateRemoverId() {
@@ -1032,13 +1081,17 @@ function createTimerElement(timer) {
     keyContent.innerHTML = `Key: <span class="timer-text-content">${escapeHtml(timer.keyPress)}</span>`;
     details.appendChild(keyContent);
   }
-  
+
+  div.appendChild(header);
+  div.appendChild(details);
+
+  // Check if URL has changed (after element is constructed)
   if (timer.status === 'pending') {
     checkUrlStatus(timer).then(urlStatus => {
       if (urlStatus.changed) {
         const urlStatusDiv = document.createElement('div');
         urlStatusDiv.className = 'url-status warning';
-        
+
         if (timer.urlBehavior === 'cancel') {
           urlStatusDiv.textContent = '⚠️ URL changed - will not run';
         } else if (timer.urlBehavior === 'new-tab') {
@@ -1048,15 +1101,17 @@ function createTimerElement(timer) {
           urlStatusDiv.className = 'url-status info';
           urlStatusDiv.textContent = '🔄 Will navigate to original URL';
         }
-        
-        details.appendChild(urlStatusDiv);
+
+        // Append to details if div is still in the DOM
+        if (div.parentNode && details.parentNode) {
+          details.appendChild(urlStatusDiv);
+        }
       }
+    }).catch(error => {
+      console.error('Error checking URL status:', error);
     });
   }
-  
-  div.appendChild(header);
-  div.appendChild(details);
-  
+
   return div;
 }
 
@@ -1341,9 +1396,10 @@ function createLogElement(log) {
   return div;
 }
 
-// Toggle sensitive text
-function toggleSensitiveText(timerId) {
+// Toggle sensitive text visibility
+async function toggleSensitiveText(timerId) {
   textVisibilityState[timerId] = !textVisibilityState[timerId];
+  await saveTextVisibilityState();
   loadTimers();
 }
 
@@ -1379,6 +1435,11 @@ function updateCountdown(element, targetTime) {
 
 // Start timer updates
 function startTimerUpdates() {
+  // Clear existing interval if any
+  if (updateInterval) {
+    clearInterval(updateInterval);
+  }
+
   updateInterval = setInterval(() => {
     const countdowns = document.querySelectorAll('.timer-countdown');
     countdowns.forEach(countdown => {
@@ -1637,47 +1698,58 @@ function resetForm() {
   document.getElementById('form-title').textContent = 'Add Timed Event';
   document.getElementById('submit-btn').textContent = 'Add Timed Event';
   document.getElementById('cancel-edit-btn').style.display = 'none';
-  
-  document.querySelector(`input[name="event-type"][value="${settings.defaultEventType}"]`).checked = true;
-  updateFormVisibility();
-  
-  document.querySelector(`input[name="text-entry-method"][value="${settings.defaultTextEntryMethod}"]`).checked = true;
-  updateTextEntryMethodVisibility();
-  
-  document.getElementById('css-selector').value = settings.defaultEventType === 'enterText' ? 'input#username' : 
-                                                   settings.defaultEventType === 'keyPress' ? 'input#search' : 
-                                                   'button[aria-label="Continue"]';
-  document.getElementById('text-to-enter').value = '';
-  document.getElementById('key-press').value = '';
-  document.getElementById('trigger-events').checked = true;
-  
-  // Reset schedule type
-  document.querySelector('input[name="schedule-type"][value="once-off"]').checked = true;
-  document.querySelector('input[name="timing-method"][value="at-time"]').checked = true;
-  updateScheduleTypeVisibility();
-  
-  // Reset delay fields
-  document.getElementById('delay-hours').value = 0;
-  document.getElementById('delay-minutes').value = 0;
-  document.getElementById('delay-seconds').value = 30;
-  
-  // Reset repeat limit
-  document.querySelector('input[name="repeat-limit"][value="indefinitely"]').checked = true;
-  document.getElementById('repeat-times').value = 10;
-  updateRepeatLimitVisibility();
-  
-  initializeDateSelector();
-  
-  const now = new Date();
-  document.getElementById('hours').value = now.getHours().toString().padStart(2, '0');
-  document.getElementById('minutes').value = now.getMinutes().toString().padStart(2, '0');
-  document.getElementById('seconds').value = now.getSeconds().toString().padStart(2, '0');
-  
-  document.getElementById('daily-hours').value = now.getHours().toString().padStart(2, '0');
-  document.getElementById('daily-minutes').value = now.getMinutes().toString().padStart(2, '0');
-  document.getElementById('daily-seconds').value = now.getSeconds().toString().padStart(2, '0');
-  
-  loadAdvancedSettings();
+
+  try {
+    // Reset to defaults (with error handling in case settings not loaded)
+    const defaultEventType = settings.defaultEventType || 'enterText';
+    const defaultTextEntryMethod = settings.defaultTextEntryMethod || 'keystroke';
+
+    const eventTypeRadio = document.querySelector(`input[name="event-type"][value="${defaultEventType}"]`);
+    if (eventTypeRadio) eventTypeRadio.checked = true;
+
+    const textEntryMethodRadio = document.querySelector(`input[name="text-entry-method"][value="${defaultTextEntryMethod}"]`);
+    if (textEntryMethodRadio) textEntryMethodRadio.checked = true;
+
+    updateFormVisibility();
+    updateTextEntryMethodVisibility();
+
+    document.getElementById('css-selector').value = defaultEventType === 'enterText' ? 'input#username' :
+                                                     defaultEventType === 'keyPress' ? 'input#search' :
+                                                     'button[aria-label="Continue"]';
+    document.getElementById('text-to-enter').value = '';
+    document.getElementById('key-press').value = '';
+    document.getElementById('trigger-events').checked = true;
+
+    // Reset schedule type
+    document.querySelector('input[name="schedule-type"][value="once-off"]').checked = true;
+    document.querySelector('input[name="timing-method"][value="at-time"]').checked = true;
+    updateScheduleTypeVisibility();
+
+    // Reset delay fields
+    document.getElementById('delay-hours').value = 0;
+    document.getElementById('delay-minutes').value = 0;
+    document.getElementById('delay-seconds').value = 30;
+
+    // Reset repeat limit
+    document.querySelector('input[name="repeat-limit"][value="indefinitely"]').checked = true;
+    document.getElementById('repeat-times').value = 10;
+    updateRepeatLimitVisibility();
+
+    initializeDateSelector();
+
+    const now = new Date();
+    document.getElementById('hours').value = now.getHours().toString().padStart(2, '0');
+    document.getElementById('minutes').value = now.getMinutes().toString().padStart(2, '0');
+    document.getElementById('seconds').value = now.getSeconds().toString().padStart(2, '0');
+
+    document.getElementById('daily-hours').value = now.getHours().toString().padStart(2, '0');
+    document.getElementById('daily-minutes').value = now.getMinutes().toString().padStart(2, '0');
+    document.getElementById('daily-seconds').value = now.getSeconds().toString().padStart(2, '0');
+
+    loadAdvancedSettings();
+  } catch (error) {
+    console.error('Error resetting form:', error);
+  }
 }
 
 // Reset removal form

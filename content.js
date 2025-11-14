@@ -11,7 +11,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }).catch(error => {
       sendResponse({ success: false, error: error.message });
     });
-    return true;
+    return true; // Keep channel open for async response
   } else if (message.action === 'enterText') {
     enterText(message.selector, message.text, message.settings).then(result => {
       sendResponse(result);
@@ -54,10 +54,10 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 function checkElementExists(selector) {
   try {
     const elements = document.querySelectorAll(selector);
-    return { 
-      success: true, 
+    return {
+      success: true,
       exists: elements.length > 0,
-      count: elements.length 
+      count: elements.length
     };
   } catch (error) {
     return { success: false, error: error.message };
@@ -71,16 +71,16 @@ function scrollDown(amount) {
 
 // Click element with retry logic
 async function clickElement(selector, options = {}) {
-  const { 
-    maxRetries = 0, 
-    scrollOnFail = false, 
+  const {
+    maxRetries = 0,
+    scrollOnFail = false,
     scrollDelay = 5000,
-    refreshOnFail = false 
+    refreshOnFail = false
   } = options;
-  
+
   try {
     let elements = document.querySelectorAll(selector);
-    
+
     // Initial check
     if (elements.length === 0) {
       if (!scrollOnFail && !refreshOnFail) {
@@ -111,34 +111,41 @@ async function clickElement(selector, options = {}) {
         return { success: false, error: 'Element not found after retries' };
       }
     }
-    
+
     const element = elements[0];
-    
+
+    // Check if element is visible and clickable
     if (!isElementClickable(element)) {
       console.log(`Element found but not clickable: ${selector}`);
     }
-    
+
+    // Scroll element into view
     element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    
+
+    // Wait a moment for scroll, then click
     await sleep(300);
-    
+
     try {
+      // Try multiple click methods for better compatibility
+
+      // Method 1: Direct click
       element.click();
-      
+
+      // Method 2: MouseEvent (if direct click doesn't work)
       const clickEvent = new MouseEvent('click', {
         view: window,
         bubbles: true,
         cancelable: true
       });
       element.dispatchEvent(clickEvent);
-      
+
       console.log(`Successfully clicked element: ${selector}`);
       return { success: true };
     } catch (clickError) {
       console.error(`Error during click: ${clickError}`);
       return { success: false, error: clickError.message };
     }
-    
+
   } catch (error) {
     console.error(`Error clicking element: ${error}`);
     return { success: false, error: error.message };
@@ -292,9 +299,9 @@ async function enterText(selector, text, settings) {
     } else if (method === 'setInnerHTML') {
       return await enterTextViaSetInnerHTML(element, text, settings);
     }
-    
+
     return { success: false, error: 'Unknown text entry method' };
-    
+
   } catch (error) {
     console.error(`Error entering text: ${error}`);
     return { success: false, error: error.message };

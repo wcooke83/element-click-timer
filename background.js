@@ -5,7 +5,10 @@ let timers = [];
 let removers = [];
 let timerLog = [];
 let checkInterval = null;
+let autoDeleteInterval = null;
 let settings = {};
+let isInitialized = false;
+let executingTimers = new Set(); // Track timers currently being executed
 
 // Default settings
 const DEFAULT_SETTINGS = {
@@ -134,10 +137,10 @@ async function loadTimersFromStorage() {
   try {
     const localData = await browser.storage.local.get('timers');
     const persistentTimers = localData.timers || [];
-    
+
     const sessionData = await browser.storage.session?.get('timers') || { timers: [] };
     const sessionTimers = sessionData.timers || [];
-    
+
     timers = [...persistentTimers, ...sessionTimers];
     
     timers = timers.filter(timer => {
@@ -206,10 +209,10 @@ function shouldAutoDelete(timer) {
   if (!timer.executedAt) {
     timer.executedAt = timer.targetTime;
   }
-  
+
   const now = Date.now();
   const timeSinceExecution = now - timer.executedAt;
-  
+
   switch (settings.autoDeleteExecuted) {
     case '5min':
       return timeSinceExecution > 5 * 60 * 1000;
@@ -235,7 +238,7 @@ function startAutoDeleteChecker() {
       }
       return true;
     });
-    
+
     if (timers.length !== initialLength) {
       await saveTimersToStorage();
       notifyPopups('timerUpdated');
@@ -554,10 +557,22 @@ function startTimerChecker() {
 // Check and execute timers
 async function checkAndExecuteTimers() {
   const now = Date.now();
-  
+
   for (const timer of timers) {
+    // Skip if already executing (prevent concurrent execution)
+    if (executingTimers.has(timer.id)) {
+      continue;
+    }
+
     if (timer.status === 'pending' && timer.targetTime <= now) {
-      await executeTimer(timer);
+      // Mark as executing
+      executingTimers.add(timer.id);
+
+      // Execute timer (don't await to allow parallel execution of different timers)
+      executeTimer(timer).finally(() => {
+        // Remove from executing set when done
+        executingTimers.delete(timer.id);
+      });
     }
   }
 }
@@ -804,41 +819,41 @@ async function executeTimer(timer) {
 async function clickElementWithRetry(tabId, cssSelector) {
   const scrollDelay = settings.scrollDelay * 1000;
   const refreshOnFail = settings.refreshOnElementNotFound;
-  
+
   // First attempt - check if element exists
   let checkResult = await checkElement(tabId, cssSelector);
-  
+
   if (!checkResult.exists) {
     // Scroll down and wait
     await scrollDown(tabId);
     await sleep(scrollDelay);
-    
+
     // Check again
     checkResult = await checkElement(tabId, cssSelector);
-    
+
     if (!checkResult.exists && refreshOnFail) {
       // Refresh the page
       await browser.tabs.reload(tabId);
       await waitForTabLoad(tabId);
-      
+
       // Check after refresh
       checkResult = await checkElement(tabId, cssSelector);
-      
+
       if (!checkResult.exists) {
         // Scroll down again and wait
         await scrollDown(tabId);
         await sleep(scrollDelay);
-        
+
         // Final check
         checkResult = await checkElement(tabId, cssSelector);
       }
     }
   }
-  
+
   if (!checkResult.exists) {
     return false;
   }
-  
+
   // Element found, now click it
   try {
     const response = await browser.tabs.sendMessage(tabId, {
@@ -846,10 +861,26 @@ async function clickElementWithRetry(tabId, cssSelector) {
       selector: cssSelector,
       options: {}
     });
-    
+
     return response && response.success;
   } catch (error) {
     console.error('Error clicking element:', error);
+    // Check if error is due to content script not being injected
+    if (error.message && error.message.includes('Could not establish connection')) {
+      console.error('Content script may not be injected yet. Trying to wait...');
+      // Wait a bit and retry once
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      try {
+        const retryResponse = await browser.tabs.sendMessage(tabId, {
+          action: 'clickElement',
+          selector: cssSelector
+        });
+        return retryResponse && retryResponse.success;
+      } catch (retryError) {
+        console.error('Retry also failed:', retryError);
+        return false;
+      }
+    }
     return false;
   }
 }
@@ -890,10 +921,28 @@ async function enterTextInElement(tabId, cssSelector, text, settings) {
       text: text,
       settings: settings
     });
-    
+
     return response && response.success;
   } catch (error) {
     console.error('Error entering text:', error);
+    // Check if error is due to content script not being injected
+    if (error.message && error.message.includes('Could not establish connection')) {
+      console.error('Content script may not be injected yet. Trying to wait...');
+      // Wait a bit and retry once
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      try {
+        const retryResponse = await browser.tabs.sendMessage(tabId, {
+          action: 'enterText',
+          selector: cssSelector,
+          text: text,
+          settings: settings
+        });
+        return retryResponse && retryResponse.success;
+      } catch (retryError) {
+        console.error('Retry also failed:', retryError);
+        return false;
+      }
+    }
     return false;
   }
 }
