@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await initializeTimeSelectors();
   await loadCurrentTab();
   await loadTimers();
+  await loadSelectedSelector();
   setupEventListeners();
   startTimerUpdates();
   applyDefaultSettings();
@@ -241,6 +242,39 @@ async function loadCurrentTab() {
   const tabs = await browser.tabs.query({ active: true, currentWindow: true });
   if (tabs[0]) {
     currentTabId = tabs[0].id;
+  }
+}
+
+// Load selected selector from storage (if any)
+async function loadSelectedSelector() {
+  try {
+    // Try session storage first, fallback to local storage
+    let data;
+    if (browser.storage.session) {
+      data = await browser.storage.session.get('selectedSelector');
+    }
+    if (!data?.selectedSelector) {
+      data = await browser.storage.local.get('selectedSelector');
+    }
+
+    if (data?.selectedSelector) {
+      const selectorInput = document.getElementById('css-selector');
+      selectorInput.value = data.selectedSelector;
+
+      // Visual feedback
+      selectorInput.style.background = '#d4edda';
+      setTimeout(() => {
+        selectorInput.style.background = '';
+      }, 1000);
+
+      // Clear the stored selector
+      if (browser.storage.session) {
+        await browser.storage.session.remove('selectedSelector');
+      }
+      await browser.storage.local.remove('selectedSelector');
+    }
+  } catch (error) {
+    console.error('Error loading selected selector:', error);
   }
 }
 
@@ -796,6 +830,9 @@ async function handlePickElement() {
     });
 
     console.log('Recording mode started in tab:', currentTab.id);
+
+    // Close the popup window
+    window.close();
   } catch (error) {
     console.error('Error starting recording mode:', error);
     alert('Failed to start recording mode. Make sure the page is loaded and try again.');
