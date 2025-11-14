@@ -37,7 +37,13 @@
         
         <div class="form-group">
           <label for="css-selector">CSS Selector:</label>
-          <input type="text" id="css-selector" placeholder='input#username' value='input#username'>
+          <div class="selector-input-group">
+            <input type="text" id="css-selector" placeholder='input#username' value='input#username'>
+            <button type="button" id="pick-element-btn" class="btn btn-secondary" title="Click to pick an element from the page">
+              🎯 Pick Element
+            </button>
+          </div>
+          <small class="help-text">Click "Pick Element" to visually select an element from the page</small>
         </div>
         
         <!-- Text Entry Fields (shown only for enterText) -->
