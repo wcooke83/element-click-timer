@@ -25,7 +25,13 @@
         
         <div class="form-group">
           <label for="removal-css-selector">CSS Selector:</label>
-          <input type="text" id="removal-css-selector" placeholder='div[id^="google_ads_iframe_"]'>
+          <div class="selector-input-group">
+            <input type="text" id="removal-css-selector" placeholder='div[id^="google_ads_iframe_"]'>
+            <button type="button" id="pick-element-removal-btn" class="btn btn-secondary" title="Click to pick an element from the page">
+              🎯 Pick Element
+            </button>
+          </div>
+          <small class="help-text">Click "Pick Element" to visually select an element from the page</small>
         </div>
         
         <div class="form-group">

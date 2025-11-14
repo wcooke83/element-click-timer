@@ -8,6 +8,7 @@ let updateInterval = null;
 let settings = {};
 let textVisibilityState = {};
 let advancedSettings = {};
+let targetSelectorInput = null; // Track which input should receive the picked selector
 
 // Default settings
 const DEFAULT_SETTINGS = {
@@ -526,8 +527,9 @@ function setupEventListeners() {
     radio.addEventListener('change', updateRepeatLimitVisibility);
   });
 
-  // Pick element button
-  document.getElementById('pick-element-btn').addEventListener('click', handlePickElement);
+  // Pick element buttons
+  document.getElementById('pick-element-btn').addEventListener('click', () => handlePickElement('css-selector', 'pick-element-btn'));
+  document.getElementById('pick-element-removal-btn').addEventListener('click', () => handlePickElement('removal-css-selector', 'pick-element-removal-btn'));
 
   // Settings
   document.getElementById('save-settings-btn').addEventListener('click', handleSaveSettings);
@@ -1839,7 +1841,7 @@ function escapeHtml(text) {
 let isRecording = false;
 
 // Handle pick element button click
-async function handlePickElement() {
+async function handlePickElement(inputId = 'css-selector', buttonId = 'pick-element-btn') {
   // Toggle: if already recording, stop it
   if (isRecording) {
     await stopRecording();
@@ -1856,8 +1858,11 @@ async function handlePickElement() {
       return;
     }
 
+    // Set which input should receive the selector
+    targetSelectorInput = inputId;
+
     // Update button state
-    const btn = document.getElementById('pick-element-btn');
+    const btn = document.getElementById(buttonId);
     const originalText = btn.textContent;
     btn.textContent = '⏹️ Stop Recording';
     btn.classList.add('recording');
@@ -1875,7 +1880,7 @@ async function handlePickElement() {
   } catch (error) {
     console.error('Error starting recording mode:', error);
     alert('Failed to start recording mode. Make sure the page is loaded and try again.');
-    resetRecordingButton();
+    resetRecordingButton(buttonId);
   }
 }
 
@@ -1902,11 +1907,14 @@ async function stopRecording() {
 }
 
 // Reset recording button to normal state
-function resetRecordingButton() {
-  const btn = document.getElementById('pick-element-btn');
-  btn.textContent = '🎯 Pick Element';
-  btn.classList.remove('recording');
+function resetRecordingButton(buttonId = 'pick-element-btn') {
+  const btn = document.getElementById(buttonId);
+  if (btn) {
+    btn.textContent = '🎯 Pick Element';
+    btn.classList.remove('recording');
+  }
   isRecording = false;
+  targetSelectorInput = null;
 }
 
 // Listen for messages from content script and background
@@ -1921,15 +1929,18 @@ browser.runtime.onMessage.addListener((message) => {
     loadLog();
   } else if (message.action === 'elementSelected') {
     // Element was selected in recording mode
-    const selectorInput = document.getElementById('css-selector');
-    selectorInput.value = message.selector;
-    selectorInput.focus();
+    const inputId = targetSelectorInput || 'css-selector';
+    const selectorInput = document.getElementById(inputId);
+    if (selectorInput) {
+      selectorInput.value = message.selector;
+      selectorInput.focus();
 
-    // Visual feedback
-    selectorInput.style.background = '#d4edda';
-    setTimeout(() => {
-      selectorInput.style.background = '';
-    }, 1000);
+      // Visual feedback
+      selectorInput.style.background = '#d4edda';
+      setTimeout(() => {
+        selectorInput.style.background = '';
+      }, 1000);
+    }
 
     resetRecordingButton();
   } else if (message.action === 'recordingCancelled') {

@@ -696,7 +696,6 @@ function createRecordingHighlight() {
   recordingHighlight.style.cssText = `
     position: absolute;
     border: 3px solid #4CAF50;
-    background: rgba(76, 175, 80, 0.1);
     pointer-events: none;
     z-index: 999999;
     transition: all 0.1s ease;
