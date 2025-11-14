@@ -471,27 +471,30 @@ function setupEventListeners() {
   document.querySelectorAll('input[name="event-type"]').forEach(radio => {
     radio.addEventListener('change', updateFormVisibility);
   });
-  
+
   // Text entry method change
   document.querySelectorAll('input[name="text-entry-method"]').forEach(radio => {
     radio.addEventListener('change', updateTextEntryMethodVisibility);
   });
-  
+
   // Schedule type change
   document.querySelectorAll('input[name="schedule-type"]').forEach(radio => {
     radio.addEventListener('change', updateScheduleTypeVisibility);
   });
-  
+
   // Timing method change
   document.querySelectorAll('input[name="timing-method"]').forEach(radio => {
     radio.addEventListener('change', updateScheduleTypeVisibility);
   });
-  
+
   // Repeat limit change
   document.querySelectorAll('input[name="repeat-limit"]').forEach(radio => {
     radio.addEventListener('change', updateRepeatLimitVisibility);
   });
-  
+
+  // Pick element button
+  document.getElementById('pick-element-btn').addEventListener('click', handlePickElement);
+
   // Settings
   document.getElementById('save-settings-btn').addEventListener('click', handleSaveSettings);
   document.getElementById('reset-settings-btn').addEventListener('click', handleResetSettings);
@@ -1797,7 +1800,79 @@ function escapeHtml(text) {
   return text.replace(/[&<>"']/g, m => map[m]);
 }
 
-// Listen for updates from background
+// ==================== RECORDING MODE ====================
+
+let isRecording = false;
+
+// Handle pick element button click
+async function handlePickElement() {
+  // Toggle: if already recording, stop it
+  if (isRecording) {
+    await stopRecording();
+    return;
+  }
+
+  try {
+    // Get current active tab
+    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    const currentTab = tabs[0];
+
+    if (!currentTab) {
+      alert('No active tab found');
+      return;
+    }
+
+    // Update button state
+    const btn = document.getElementById('pick-element-btn');
+    const originalText = btn.textContent;
+    btn.textContent = '⏹️ Stop Recording';
+    btn.classList.add('recording');
+    isRecording = true;
+
+    // Send message to content script to start recording
+    await browser.tabs.sendMessage(currentTab.id, {
+      action: 'startRecording'
+    });
+
+    console.log('Recording mode started in tab:', currentTab.id);
+  } catch (error) {
+    console.error('Error starting recording mode:', error);
+    alert('Failed to start recording mode. Make sure the page is loaded and try again.');
+    resetRecordingButton();
+  }
+}
+
+// Stop recording mode
+async function stopRecording() {
+  if (!isRecording) return;
+
+  try {
+    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    const currentTab = tabs[0];
+
+    if (currentTab) {
+      await browser.tabs.sendMessage(currentTab.id, {
+        action: 'stopRecording'
+      }).catch(() => {
+        // Ignore errors if content script is not responsive
+      });
+    }
+  } catch (error) {
+    console.error('Error stopping recording:', error);
+  }
+
+  resetRecordingButton();
+}
+
+// Reset recording button to normal state
+function resetRecordingButton() {
+  const btn = document.getElementById('pick-element-btn');
+  btn.textContent = '🎯 Pick Element';
+  btn.classList.remove('recording');
+  isRecording = false;
+}
+
+// Listen for messages from content script and background
 browser.runtime.onMessage.addListener((message) => {
   if (message.action === 'timerUpdated' || message.action === 'timerExecuted') {
     loadTimers();
@@ -1807,12 +1882,33 @@ browser.runtime.onMessage.addListener((message) => {
     loadLog();
   } else if (message.action === 'logUpdated') {
     loadLog();
+  } else if (message.action === 'elementSelected') {
+    // Element was selected in recording mode
+    const selectorInput = document.getElementById('css-selector');
+    selectorInput.value = message.selector;
+    selectorInput.focus();
+
+    // Visual feedback
+    selectorInput.style.background = '#d4edda';
+    setTimeout(() => {
+      selectorInput.style.background = '';
+    }, 1000);
+
+    resetRecordingButton();
+  } else if (message.action === 'recordingCancelled') {
+    // User cancelled recording (pressed ESC)
+    resetRecordingButton();
   }
 });
 
 // Cleanup on unload
-window.addEventListener('unload', () => {
+window.addEventListener('unload', async () => {
   if (updateInterval) {
     clearInterval(updateInterval);
+  }
+
+  // Stop recording if active
+  if (isRecording) {
+    await stopRecording();
   }
 });

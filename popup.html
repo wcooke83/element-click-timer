@@ -71,14 +71,21 @@
             </label>
           </div>
         </div>
-        
-        <div class="form-row">
-          <div class="form-group flex-1">
-            <label for="css-selector">CSS Selector:</label>
+
+        <div class="form-group">
+          <label for="css-selector">CSS Selector:</label>
+          <div class="selector-input-group">
             <input type="text" id="css-selector" placeholder='input#username' value='input#username'>
+            <button type="button" id="pick-element-btn" class="btn btn-secondary" title="Click to pick an element from the page">
+              🎯 Pick Element
+            </button>
           </div>
-          
-          <div class="form-group flex-1" id="text-entry-input-group">
+          <small class="help-text">Click "Pick Element" to visually select an element from the page</small>
+        </div>
+
+        <!-- Text Entry Fields (shown only for enterText) -->
+        <div id="text-entry-fields">
+          <div class="form-group" id="text-entry-input-group">
             <label for="text-to-enter">Text to Enter:</label>
             <input type="text" id="text-to-enter" placeholder="Enter the text to type">
           </div>
