@@ -250,6 +250,7 @@ function sleep(ms) {
 let recordingMode = false;
 let recordingOverlay = null;
 let recordingHighlight = null;
+let recordingSelectorPreview = null;
 let lastHighlightedElement = null;
 
 // Start recording mode
@@ -259,6 +260,7 @@ function startRecordingMode() {
   recordingMode = true;
   createRecordingOverlay();
   createRecordingHighlight();
+  createSelectorPreview();
 
   // Add event listeners
   document.addEventListener('mousemove', handleRecordingMouseMove, true);
@@ -274,16 +276,20 @@ function stopRecordingMode() {
 
   recordingMode = false;
 
-  // Remove overlay and highlight
+  // Remove overlay, highlight, and selector preview
   if (recordingOverlay && recordingOverlay.parentNode) {
     recordingOverlay.parentNode.removeChild(recordingOverlay);
   }
   if (recordingHighlight && recordingHighlight.parentNode) {
     recordingHighlight.parentNode.removeChild(recordingHighlight);
   }
+  if (recordingSelectorPreview && recordingSelectorPreview.parentNode) {
+    recordingSelectorPreview.parentNode.removeChild(recordingSelectorPreview);
+  }
 
   recordingOverlay = null;
   recordingHighlight = null;
+  recordingSelectorPreview = null;
   lastHighlightedElement = null;
 
   // Remove event listeners
@@ -307,6 +313,7 @@ function createRecordingOverlay() {
     background: rgba(0, 0, 0, 0.3);
     z-index: 999998;
     cursor: crosshair;
+    pointer-events: none;
   `;
 
   const message = document.createElement('div');
@@ -349,6 +356,30 @@ function createRecordingHighlight() {
   document.body.appendChild(recordingHighlight);
 }
 
+// Create selector preview tooltip
+function createSelectorPreview() {
+  recordingSelectorPreview = document.createElement('div');
+  recordingSelectorPreview.id = 'element-click-timer-selector-preview';
+  recordingSelectorPreview.style.cssText = `
+    position: fixed;
+    background: #2C3E50;
+    color: #ECF0F1;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 1000000;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    max-width: 400px;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    line-height: 1.4;
+  `;
+  recordingSelectorPreview.style.display = 'none';
+  document.body.appendChild(recordingSelectorPreview);
+}
+
 // Handle mouse move during recording
 function handleRecordingMouseMove(e) {
   const element = document.elementFromPoint(e.clientX, e.clientY);
@@ -378,6 +409,36 @@ function highlightElement(element) {
   recordingHighlight.style.top = (rect.top + scrollY) + 'px';
   recordingHighlight.style.width = rect.width + 'px';
   recordingHighlight.style.height = rect.height + 'px';
+
+  // Update selector preview
+  if (recordingSelectorPreview) {
+    const selector = generateOptimalSelector(element);
+    const tagName = element.tagName.toLowerCase();
+
+    // Create info display
+    recordingSelectorPreview.innerHTML = `<div style="margin-bottom: 4px; color: #3498DB; font-weight: bold;">CSS Selector:</div><div style="color: #2ECC71;">${escapeHtmlContent(selector)}</div><div style="margin-top: 6px; font-size: 10px; color: #95A5A6;">Tag: &lt;${tagName}&gt;</div>`;
+
+    recordingSelectorPreview.style.display = 'block';
+
+    // Position the preview near the cursor, but keep it visible
+    const previewX = rect.left + rect.width / 2;
+    const previewY = rect.top - 10;
+
+    // Make sure it doesn't go off screen
+    const maxX = window.innerWidth - 420; // 400px max-width + 20px margin
+    const x = Math.max(10, Math.min(maxX, previewX));
+    const y = previewY > 100 ? previewY : rect.bottom + 10;
+
+    recordingSelectorPreview.style.left = x + 'px';
+    recordingSelectorPreview.style.top = y + 'px';
+  }
+}
+
+// Escape HTML for safe display in tooltip
+function escapeHtmlContent(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 // Handle click during recording
