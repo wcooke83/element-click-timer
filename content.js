@@ -699,7 +699,6 @@ function createRecordingHighlight() {
     background: rgba(76, 175, 80, 0.1);
     pointer-events: none;
     z-index: 999999;
-    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.3);
     transition: all 0.1s ease;
   `;
   recordingHighlight.style.display = 'none';
@@ -712,13 +711,15 @@ function createSelectorPreview() {
   recordingSelectorPreview.id = 'element-click-timer-selector-preview';
   recordingSelectorPreview.style.cssText = `
     position: fixed;
+    top: 20px;
+    right: 20px;
     background: #2C3E50;
     color: #ECF0F1;
     padding: 8px 12px;
     border-radius: 6px;
     font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
     font-size: 12px;
-    pointer-events: none;
+    pointer-events: auto;
     z-index: 1000000;
     box-shadow: 0 4px 12px rgba(0,0,0,0.4);
     max-width: 400px;
@@ -769,18 +770,6 @@ function highlightElement(element) {
     recordingSelectorPreview.innerHTML = `<div style="margin-bottom: 4px; color: #3498DB; font-weight: bold;">CSS Selector:</div><div style="color: #2ECC71;">${escapeHtmlContent(selector)}</div><div style="margin-top: 6px; font-size: 10px; color: #95A5A6;">Tag: &lt;${tagName}&gt;</div>`;
 
     recordingSelectorPreview.style.display = 'block';
-
-    // Position the preview near the cursor, but keep it visible
-    const previewX = rect.left + rect.width / 2;
-    const previewY = rect.top - 10;
-
-    // Make sure it doesn't go off screen
-    const maxX = window.innerWidth - 420; // 400px max-width + 20px margin
-    const x = Math.max(10, Math.min(maxX, previewX));
-    const y = previewY > 100 ? previewY : rect.bottom + 10;
-
-    recordingSelectorPreview.style.left = x + 'px';
-    recordingSelectorPreview.style.top = y + 'px';
   }
 }
 
@@ -789,6 +778,69 @@ function escapeHtmlContent(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// Show selected selector preview with copy functionality
+function showSelectedSelectorPreview(selector) {
+  if (!recordingSelectorPreview) return;
+
+  const tagName = lastHighlightedElement ? lastHighlightedElement.tagName.toLowerCase() : '';
+
+  recordingSelectorPreview.innerHTML = `
+    <div style="margin-bottom: 8px; color: #2ECC71; font-weight: bold; font-size: 14px;">✓ Element Selected</div>
+    <div style="margin-bottom: 4px; color: #3498DB; font-weight: bold;">CSS Selector:</div>
+    <div style="color: #2ECC71; margin-bottom: 10px; padding: 6px; background: rgba(255,255,255,0.1); border-radius: 4px; user-select: all;">${escapeHtmlContent(selector)}</div>
+    ${tagName ? `<div style="margin-bottom: 10px; font-size: 10px; color: #95A5A6;">Tag: &lt;${tagName}&gt;</div>` : ''}
+    <div style="display: flex; gap: 8px; margin-top: 10px;">
+      <button id="copy-selector-btn" style="flex: 1; padding: 6px 12px; background: #3498DB; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">📋 Copy</button>
+      <button id="close-preview-btn" style="flex: 1; padding: 6px 12px; background: #E74C3C; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">✕ Close</button>
+    </div>
+  `;
+
+  recordingSelectorPreview.style.display = 'block';
+
+  // Add event listeners for buttons
+  const copyBtn = document.getElementById('copy-selector-btn');
+  const closeBtn = document.getElementById('close-preview-btn');
+
+  if (copyBtn) {
+    copyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Copy to clipboard
+      navigator.clipboard.writeText(selector).then(() => {
+        copyBtn.textContent = '✓ Copied!';
+        copyBtn.style.background = '#2ECC71';
+        setTimeout(() => {
+          copyBtn.textContent = '📋 Copy';
+          copyBtn.style.background = '#3498DB';
+        }, 2000);
+      }).catch(err => {
+        console.error('Failed to copy:', err);
+        // Fallback: create a temporary textarea
+        const textarea = document.createElement('textarea');
+        textarea.value = selector;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        copyBtn.textContent = '✓ Copied!';
+        copyBtn.style.background = '#2ECC71';
+        setTimeout(() => {
+          copyBtn.textContent = '📋 Copy';
+          copyBtn.style.background = '#3498DB';
+        }, 2000);
+      });
+    });
+  }
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      stopRecordingMode();
+    });
+  }
 }
 
 // Handle click during recording
@@ -801,13 +853,37 @@ function handleRecordingClick(e) {
 
   const selector = generateOptimalSelector(lastHighlightedElement);
 
-  // Send selector back to popup
+  // Store selector in session storage for popup to retrieve
+  browser.storage.session.set({ selectedSelector: selector }).catch(() => {
+    // Fallback to local storage if session storage is not available
+    browser.storage.local.set({ selectedSelector: selector });
+  });
+
+  // Send selector back to popup (in case it's still open)
   browser.runtime.sendMessage({
     action: 'elementSelected',
     selector: selector
-  }).catch(err => console.error('Error sending selector:', err));
+  }).catch(err => {
+    // Ignore error if popup is closed
+  });
 
-  stopRecordingMode();
+  // Update the selector preview to show it's been selected with copy functionality
+  showSelectedSelectorPreview(selector);
+
+  // Remove the overlay and highlight, but keep the selector preview
+  if (recordingOverlay && recordingOverlay.parentNode) {
+    recordingOverlay.parentNode.removeChild(recordingOverlay);
+  }
+  if (recordingHighlight && recordingHighlight.parentNode) {
+    recordingHighlight.parentNode.removeChild(recordingHighlight);
+  }
+
+  recordingOverlay = null;
+  recordingHighlight = null;
+
+  // Remove mouse move listener but keep keydown for ESC
+  document.removeEventListener('mousemove', handleRecordingMouseMove, true);
+  document.removeEventListener('click', handleRecordingClick, true);
 }
 
 // Handle keydown during recording (ESC to cancel)
