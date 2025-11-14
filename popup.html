@@ -3,27 +3,60 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Element Click Timer</title>
+  <title>Element Action Scheduler</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <div class="container">
     <!-- Tab Navigation -->
     <div class="tab-navigation">
-      <button class="tab-btn active" data-tab="timers">Timers</button>
+      <button class="tab-btn active" data-tab="element-removal">Element Removal</button>
+      <button class="tab-btn" data-tab="timed-events">Timed Events</button>
+      <button class="tab-btn" data-tab="active">Active</button>
+      <button class="tab-btn" data-tab="advanced">Advanced</button>
+      <button class="tab-btn" data-tab="log">Log</button>
       <button class="tab-btn" data-tab="settings">Settings</button>
     </div>
 
-    <!-- Timers Tab -->
-    <div class="tab-content active" id="timers-tab">
-      <!-- Timer Creation Form -->
+    <!-- Element Removal Tab -->
+    <div class="tab-content active" id="element-removal-tab">
       <div class="form-section">
-        <h2 id="form-title">Add Timer</h2>
+        <h2 id="removal-form-title">Add Element Removal Rule</h2>
         
-        <!-- Event Type Selector -->
+        <div class="form-group">
+          <label for="removal-css-selector">CSS Selector:</label>
+          <input type="text" id="removal-css-selector" placeholder='div[id^="google_ads_iframe_"]'>
+        </div>
+        
+        <div class="form-group">
+          <label>Monitor Scope:</label>
+          <div class="radio-group-horizontal">
+            <label class="radio-label">
+              <input type="radio" name="removal-scope" value="current" checked>
+              <span>Current Tab Only</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="removal-scope" value="all">
+              <span>All Tabs</span>
+            </label>
+          </div>
+        </div>
+        
+        <div class="form-actions">
+          <button id="submit-removal-btn" class="btn btn-primary">Add Removal Rule</button>
+          <button id="cancel-removal-edit-btn" class="btn btn-secondary" style="display: none;">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Timed Events Tab -->
+    <div class="tab-content" id="timed-events-tab">
+      <div class="form-section">
+        <h2 id="form-title">Add Timed Event</h2>
+        
         <div class="form-group">
           <label>Action Type:</label>
-          <div class="radio-group">
+          <div class="radio-group-horizontal">
             <label class="radio-label">
               <input type="radio" name="event-type" value="enterText" checked>
               <span>⌨️ Enter Text</span>
@@ -32,70 +65,221 @@
               <input type="radio" name="event-type" value="click">
               <span>🖱️ Click Element</span>
             </label>
+            <label class="radio-label">
+              <input type="radio" name="event-type" value="keyPress">
+              <span>⌨️ Press Key</span>
+            </label>
           </div>
         </div>
         
-        <div class="form-group">
-          <label for="css-selector">CSS Selector:</label>
-          <input type="text" id="css-selector" placeholder='input#username' value='input#username'>
-        </div>
-        
-        <!-- Text Entry Fields (shown only for enterText) -->
-        <div id="text-entry-fields">
-          <div class="form-group">
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="css-selector">CSS Selector:</label>
+            <input type="text" id="css-selector" placeholder='input#username' value='input#username'>
+          </div>
+          
+          <div class="form-group flex-1" id="text-entry-input-group">
             <label for="text-to-enter">Text to Enter:</label>
             <input type="text" id="text-to-enter" placeholder="Enter the text to type">
           </div>
-          
+
+          <div class="form-group flex-1" id="key-press-input-group" style="display: none;">
+            <label for="key-press">Key to Press:</label>
+            <input type="text" id="key-press" placeholder="Enter, Ctrl+S, Alt+F4">
+            <small class="help-text">Examples: Enter, Tab, Escape, Ctrl+S, Alt+F4, Shift+A</small>
+          </div>
+        </div>
+        
+        <div id="text-entry-fields">
           <div class="form-group">
-            <label class="checkbox-label">
-              <input type="checkbox" id="mark-sensitive">
-              <span>Mark as sensitive data (will be masked in timer list)</span>
-            </label>
+            <label>Text Entry Method:</label>
+            <div class="radio-group-horizontal">
+              <label class="radio-label">
+                <input type="radio" name="text-entry-method" value="keystroke" checked>
+                <span>Keystroke</span>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="text-entry-method" value="setValue">
+                <span>Set Value</span>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="text-entry-method" value="setInnerHTML">
+                <span>Set innerHTML</span>
+              </label>
+            </div>
           </div>
           
+          <div class="form-group" id="trigger-events-group" style="display: none;">
+            <label class="checkbox-label">
+              <input type="checkbox" id="trigger-events" checked>
+              <span>Trigger input/change events</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Schedule Type Section -->
+        <div class="form-group">
+          <label>Schedule Type:</label>
+          <div class="radio-group-horizontal">
+            <label class="radio-label">
+              <input type="radio" name="schedule-type" value="once-off" checked>
+              <span>Once-off Event</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="schedule-type" value="recurring">
+              <span>Recurring Event</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Timing Method Section -->
+        <div class="form-group" id="timing-method-group">
+          <label>When to Run:</label>
+          <div class="radio-group-horizontal">
+            <label class="radio-label">
+              <input type="radio" name="timing-method" value="at-time" checked>
+              <span>At Specific Time</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="timing-method" value="after-delay">
+              <span>After Delay</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- At Specific Time Fields -->
+        <div id="at-time-fields">
+          <div class="form-row">
+            <div class="form-group flex-1" id="date-input-group">
+              <label>Target Date & Time:</label>
+              <div class="datetime-picker">
+                <input type="date" id="target-date">
+                <div class="time-picker">
+                  <select id="hours"></select>
+                  <span>:</span>
+                  <select id="minutes"></select>
+                  <span>:</span>
+                  <select id="seconds"></select>
+                </div>
+              </div>
+              <small class="help-text">Event will fire at the exact selected date and time</small>
+            </div>
+          </div>
+
+          <div class="form-row" id="daily-time-group" style="display: none;">
+            <div class="form-group flex-1">
+              <label>Daily at Time:</label>
+              <div class="time-picker">
+                <select id="daily-hours"></select>
+                <span>:</span>
+                <select id="daily-minutes"></select>
+                <span>:</span>
+                <select id="daily-seconds"></select>
+              </div>
+              <small class="help-text">Event will fire every day at this time</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- After Delay Fields -->
+        <div id="after-delay-fields" style="display: none;">
+          <div class="form-row">
+            <div class="form-group" style="flex: 0 0 120px;">
+              <label for="delay-hours">Hours:</label>
+              <input type="number" id="delay-hours" min="0" max="999" value="0">
+            </div>
+            <div class="form-group" style="flex: 0 0 120px;">
+              <label for="delay-minutes">Minutes:</label>
+              <input type="number" id="delay-minutes" min="0" max="59" value="0">
+            </div>
+            <div class="form-group" style="flex: 0 0 120px;">
+              <label for="delay-seconds">Seconds:</label>
+              <input type="number" id="delay-seconds" min="0" max="59" value="30">
+            </div>
+          </div>
+          <small class="help-text" id="delay-help-text">Event will fire once after the specified delay</small>
+        </div>
+
+        <!-- Repeat Limit (for recurring only) -->
+        <div id="repeat-limit-group" style="display: none;">
           <div class="form-group">
-            <label>Text Entry Mode:</label>
-            <div class="radio-group">
+            <label>Repeat Limit:</label>
+            <div class="radio-group-horizontal">
               <label class="radio-label">
-                <input type="radio" name="text-mode" value="clear" checked>
-                <span>Clear existing text before typing</span>
+                <input type="radio" name="repeat-limit" value="indefinitely" checked>
+                <span>Indefinitely</span>
               </label>
               <label class="radio-label">
-                <input type="radio" name="text-mode" value="append">
-                <span>Append to existing text</span>
+                <input type="radio" name="repeat-limit" value="times">
+                <span>X Times</span>
               </label>
+              <label class="radio-label">
+                <input type="radio" name="repeat-limit" value="until">
+                <span>Until Date</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group flex-1" id="repeat-times-group" style="display: none;">
+              <label for="repeat-times">Number of times:</label>
+              <input type="number" id="repeat-times" min="1" max="9999" value="10">
+            </div>
+
+            <div class="form-group flex-1" id="repeat-until-group" style="display: none;">
+              <label for="repeat-until-date">Until date:</label>
+              <input type="date" id="repeat-until-date">
             </div>
           </div>
         </div>
         
+        <div class="form-actions">
+          <button id="submit-btn" class="btn btn-primary">Add Timed Event</button>
+          <button id="cancel-edit-btn" class="btn btn-secondary" style="display: none;">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Advanced Tab -->
+    <div class="tab-content" id="advanced-tab">
+      <div class="advanced-section">
+        <h2>Advanced Settings</h2>
+        <p class="help-text">These settings apply to the current timed event being created or edited.</p>
+        
         <div class="form-group">
-          <label>Target Time:</label>
-          <div class="time-picker">
-            <select id="hours">
-              <!-- Populated by JavaScript -->
-            </select>
-            <span>:</span>
-            <select id="minutes">
-              <!-- Populated by JavaScript -->
-            </select>
+          <label class="checkbox-label">
+            <input type="checkbox" id="adv-mark-sensitive">
+            <span>Mark as sensitive data (will be masked in timer list)</span>
+          </label>
+        </div>
+        
+        <div class="form-group">
+          <label>Text Entry Mode:</label>
+          <div class="radio-group-horizontal">
+            <label class="radio-label">
+              <input type="radio" name="adv-text-mode" value="clear" checked>
+              <span>Clear existing text</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="adv-text-mode" value="append">
+              <span>Append to existing text</span>
+            </label>
           </div>
-          <small class="help-text">Timer will fire 5 minutes after selected time</small>
         </div>
         
         <div class="form-group">
           <label>Persistence:</label>
-          <div class="radio-group">
+          <div class="radio-group-horizontal">
             <label class="radio-label">
-              <input type="radio" name="persistence" value="session" checked>
+              <input type="radio" name="adv-persistence" value="session" checked>
               <span>Session only</span>
             </label>
             <label class="radio-label">
-              <input type="radio" name="persistence" value="tab">
+              <input type="radio" name="adv-persistence" value="tab">
               <span>Persist on tab close</span>
             </label>
             <label class="radio-label">
-              <input type="radio" name="persistence" value="browser">
+              <input type="radio" name="adv-persistence" value="browser">
               <span>Persist on browser close</span>
             </label>
           </div>
@@ -103,33 +287,91 @@
         
         <div class="form-group">
           <label>If URL Changes:</label>
-          <div class="radio-group">
+          <div class="radio-group-horizontal">
             <label class="radio-label">
-              <input type="radio" name="url-behavior" value="cancel" checked>
+              <input type="radio" name="adv-url-behavior" value="cancel" checked>
               <span>Don't run</span>
             </label>
             <label class="radio-label">
-              <input type="radio" name="url-behavior" value="new-tab">
+              <input type="radio" name="adv-url-behavior" value="new-tab">
               <span>Open new tab</span>
             </label>
             <label class="radio-label">
-              <input type="radio" name="url-behavior" value="navigate">
+              <input type="radio" name="adv-url-behavior" value="navigate">
               <span>Navigate existing tab</span>
             </label>
           </div>
         </div>
         
         <div class="form-actions">
-          <button id="submit-btn" class="btn btn-primary">Add Timer</button>
-          <button id="cancel-edit-btn" class="btn btn-secondary" style="display: none;">Cancel</button>
+          <button id="save-advanced-btn" class="btn btn-primary">Save Advanced Settings</button>
+          <button id="reset-advanced-btn" class="btn btn-secondary">Reset to Defaults</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Tab (Combined Timers and Removers) -->
+    <div class="tab-content" id="active-tab">
+      <!-- Active Removers Section -->
+      <div class="remover-list-section">
+        <h3>Active Element Removal Rules</h3>
+        <div id="remover-list" class="remover-list">
+          <p class="empty-state">No active removal rules</p>
         </div>
       </div>
       
-      <!-- Timer List -->
+      <!-- Divider -->
+      <hr class="section-divider">
+      
+      <!-- Active Timers Section -->
       <div class="timer-list-section">
         <h3>Active Timers</h3>
         <div id="timer-list" class="timer-list">
           <p class="empty-state">No active timers</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log Tab -->
+    <div class="tab-content" id="log-tab">
+      <div class="log-section">
+        <div class="log-header">
+          <h2>Activity Log</h2>
+          <div class="log-info">
+            <span id="log-count">0 entries</span>
+            <span id="log-retention-info"></span>
+          </div>
+        </div>
+        
+        <div class="log-filters">
+          <label class="radio-label">
+            <input type="radio" name="log-filter" value="all" checked>
+            <span>All</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="log-filter" value="timed-events">
+            <span>Timed Events</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="log-filter" value="element-removal">
+            <span>Element Removal</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="log-filter" value="pending">
+            <span>Pending</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="log-filter" value="executed">
+            <span>Executed</span>
+          </label>
+        </div>
+        
+        <div id="log-list" class="log-list">
+          <p class="empty-state">No log entries</p>
+        </div>
+        
+        <div class="form-actions">
+          <button id="clear-log-btn" class="btn btn-secondary">Clear Log</button>
         </div>
       </div>
     </div>
@@ -139,9 +381,9 @@
       <div class="settings-section">
         <h2>Settings</h2>
         
-        <!-- Text Entry Settings -->
+        <!-- Timed Events Settings -->
         <div class="settings-group">
-          <h3>Text Entry Settings</h3>
+          <h3>Timed Events</h3>
           
           <div class="form-group">
             <label for="typing-speed">Typing Speed (ms between characters):</label>
@@ -156,16 +398,29 @@
           </div>
           
           <div class="form-group">
+            <label for="scroll-delay">Scroll Check Delay (seconds):</label>
+            <select id="scroll-delay">
+              <option value="5">5 seconds</option>
+              <option value="10">10 seconds</option>
+              <option value="30">30 seconds</option>
+              <option value="60">60 seconds</option>
+            </select>
+            <small class="help-text">Wait time after scrolling before rechecking for element</small>
+          </div>
+          
+          <div class="form-group">
             <label class="checkbox-label">
               <input type="checkbox" id="trigger-focus-blur" checked>
               <span>Trigger focus/blur events on input field</span>
             </label>
           </div>
-        </div>
-        
-        <!-- Timer Management -->
-        <div class="settings-group">
-          <h3>Timer Management</h3>
+          
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="refresh-on-element-not-found" checked>
+              <span>Refresh page if element not found after scroll</span>
+            </label>
+          </div>
           
           <div class="form-group">
             <label for="auto-delete">Auto-delete executed timers:</label>
@@ -176,6 +431,124 @@
               <option value="1hour">1 hour</option>
               <option value="24hours">24 hours</option>
             </select>
+          </div>
+          
+          <div class="form-group">
+            <label>Text Entry Mode:</label>
+            <div class="radio-group-horizontal">
+              <label class="radio-label">
+                <input type="radio" name="default-text-mode" value="clear" checked>
+                <span>Clear existing text</span>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="default-text-mode" value="append">
+                <span>Append to existing text</span>
+              </label>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label>Persistence:</label>
+            <div class="radio-group-horizontal">
+              <label class="radio-label">
+                <input type="radio" name="default-persistence" value="session" checked>
+                <span>Session only</span>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="default-persistence" value="tab">
+                <span>Persist on tab close</span>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="default-persistence" value="browser">
+                <span>Persist on browser close</span>
+              </label>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label>If URL Changes:</label>
+            <div class="radio-group-horizontal">
+              <label class="radio-label">
+                <input type="radio" name="default-url-behavior" value="cancel" checked>
+                <span>Don't run</span>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="default-url-behavior" value="new-tab">
+                <span>Open new tab</span>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="default-url-behavior" value="navigate">
+                <span>Navigate existing tab</span>
+              </label>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label for="default-event-type">Default Action Type:</label>
+            <select id="default-event-type">
+              <option value="enterText">Enter Text</option>
+              <option value="click">Click Element</option>
+              <option value="keyPress">Press Key</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label for="default-text-entry-method">Default Text Entry Method:</label>
+            <select id="default-text-entry-method">
+              <option value="keystroke">Keystroke Emulation</option>
+              <option value="setValue">Set Value</option>
+              <option value="setInnerHTML">Set innerHTML</option>
+            </select>
+          </div>
+        </div>
+        
+        <!-- Element Removal Settings -->
+        <div class="settings-group">
+          <h3>Element Removal</h3>
+          
+          <div class="form-group">
+            <label>Persistence:</label>
+            <div class="radio-group-horizontal">
+              <label class="radio-label">
+                <input type="radio" name="removal-default-persistence" value="session" checked>
+                <span>Session only</span>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="removal-default-persistence" value="tab">
+                <span>Persist on tab close</span>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="removal-default-persistence" value="browser">
+                <span>Persist on browser close</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Log Management -->
+        <div class="settings-group">
+          <h3>Log Management</h3>
+          
+          <div class="form-group">
+            <label for="log-retention-time">Clear log entries after:</label>
+            <select id="log-retention-time">
+              <option value="never">Never</option>
+              <option value="1day">1 day</option>
+              <option value="1week">1 week</option>
+              <option value="1month">1 month</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label for="log-retention-count">Maximum log entries:</label>
+            <select id="log-retention-count">
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+              <option value="500">500</option>
+              <option value="1000">1000</option>
+            </select>
+            <small class="help-text">Oldest entries will be removed first.</small>
           </div>
         </div>
         
@@ -195,37 +568,6 @@
               <input type="checkbox" id="notify-failure" checked>
               <span>Show failure notifications</span>
             </label>
-          </div>
-        </div>
-        
-        <!-- Default Values -->
-        <div class="settings-group">
-          <h3>Default Values for New Timers</h3>
-          
-          <div class="form-group">
-            <label for="default-event-type">Default Action Type:</label>
-            <select id="default-event-type">
-              <option value="enterText">Enter Text</option>
-              <option value="click">Click Element</option>
-            </select>
-          </div>
-          
-          <div class="form-group">
-            <label for="default-persistence">Default Persistence:</label>
-            <select id="default-persistence">
-              <option value="session">Session only</option>
-              <option value="tab">Persist on tab close</option>
-              <option value="browser">Persist on browser close</option>
-            </select>
-          </div>
-          
-          <div class="form-group">
-            <label for="default-url-behavior">Default URL Behavior:</label>
-            <select id="default-url-behavior">
-              <option value="cancel">Don't run</option>
-              <option value="new-tab">Open new tab</option>
-              <option value="navigate">Navigate existing tab</option>
-            </select>
           </div>
         </div>
         

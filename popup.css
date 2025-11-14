@@ -1,3 +1,58 @@
+/* popup.css - Styles for the browser extension popup UI */
+
+/* Hide text entry fields initially */
+#text-entry-fields {
+  display: block;
+}
+
+/* Tab link styling */
+.tab-link {
+  color: var(--text-primary);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.tab-link:hover {
+  color: var(--accent-color);
+  text-decoration: underline;
+}
+
+/* Execution time styling */
+.execution-time {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  font-style: italic;
+}
+
+/* Section divider */
+.section-divider {
+  border: none;
+  border-top: 2px solid var(--border-color);
+  margin: 24px 0;
+}
+
+/* Recurring badge */
+.recurring-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  margin-left: 8px;
+  background: var(--info-bg);
+  color: var(--info-text);
+}
+
+/* Schedule info */
+.schedule-info {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  font-style: italic;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -57,7 +112,7 @@ body {
   font-size: 14px;
   color: var(--text-primary);
   background: var(--bg-primary);
-  width: 500px;
+  width: 800px;
   max-height: 600px;
   overflow-y: auto;
 }
@@ -74,19 +129,21 @@ body {
   position: sticky;
   top: 0;
   z-index: 10;
+  overflow-x: auto;
 }
 
 .tab-btn {
-  flex: 1;
-  padding: 12px 20px;
+  flex: 0 0 auto;
+  padding: 12px 16px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   border-bottom: 3px solid transparent;
+  white-space: nowrap;
 }
 
 .tab-btn:hover {
@@ -136,7 +193,8 @@ body {
 }
 
 .form-group input[type="text"],
-.form-group input[type="number"] {
+.form-group input[type="number"],
+.form-group input[type="date"] {
   width: 100%;
   padding: 8px 12px;
   border: 1px solid var(--border-color);
@@ -148,7 +206,8 @@ body {
 }
 
 .form-group input[type="text"]:focus,
-.form-group input[type="number"]:focus {
+.form-group input[type="number"]:focus,
+.form-group input[type="date"]:focus {
   outline: none;
   border-color: var(--accent-color);
   box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
@@ -170,14 +229,42 @@ body {
   border-color: var(--accent-color);
 }
 
+/* Form Row Layout */
+.form-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.form-row .form-group {
+  margin-bottom: 0;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+/* DateTime Picker */
+.datetime-picker {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.datetime-picker input[type="date"] {
+  flex: 1;
+  min-width: 150px;
+}
+
 .time-picker {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
 .time-picker select {
-  padding: 8px 12px;
+  padding: 8px 6px;
+  width: 60px;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 14px;
@@ -198,10 +285,17 @@ body {
   font-size: 12px;
 }
 
+/* Radio and Checkbox Groups */
 .radio-group {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.radio-group-horizontal {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .radio-label {
@@ -307,14 +401,36 @@ body {
   color: var(--text-secondary);
 }
 
-/* Timer List Section */
-.timer-list-section h3 {
+/* Advanced Section */
+.advanced-section {
+  padding: 0;
+}
+
+.advanced-section h2 {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.advanced-section > .help-text {
+  margin-bottom: 20px;
+  font-size: 13px;
+}
+
+/* Timer/Remover List Section */
+.timer-list-section,
+.remover-list-section {
+  padding: 0;
+}
+
+.timer-list-section h3,
+.remover-list-section h3 {
   font-size: 16px;
   margin-bottom: 12px;
   color: var(--text-primary);
 }
 
-.timer-list {
+.timer-list,
+.remover-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -340,7 +456,8 @@ body {
 }
 
 /* Timer Item */
-.timer-item {
+.timer-item,
+.remover-item {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
@@ -348,34 +465,39 @@ body {
   transition: all 0.2s;
 }
 
-.timer-item:hover {
+.timer-item:hover,
+.remover-item:hover {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* Active tab timer styling */
-.timer-item.active-tab {
+.timer-item.active-tab,
+.remover-item.active-tab {
   border-left: 4px solid var(--accent-color);
   background: var(--active-tab-bg);
 }
 
-.timer-item.active-tab .timer-title {
+.timer-item.active-tab .timer-title,
+.remover-item.active-tab .remover-title {
   font-weight: bold;
 }
 
-.timer-header {
+.timer-header,
+.remover-header {
   display: flex;
   justify-content: space-between;
   align-items: start;
   margin-bottom: 8px;
 }
 
-.timer-title {
+.timer-title,
+.remover-title {
   font-size: 14px;
   color: var(--text-primary);
   margin-bottom: 4px;
 }
 
-.timer-event-type {
+.timer-event-type,
+.remover-scope-badge {
   display: inline-block;
   padding: 2px 6px;
   border-radius: 3px;
@@ -386,7 +508,8 @@ body {
   color: var(--text-secondary);
 }
 
-.timer-actions {
+.timer-actions,
+.remover-actions {
   display: flex;
   gap: 6px;
 }
@@ -405,7 +528,8 @@ body {
   background: var(--bg-tertiary);
 }
 
-.timer-details {
+.timer-details,
+.remover-details {
   font-size: 12px;
   color: var(--text-tertiary);
   line-height: 1.6;
@@ -425,7 +549,8 @@ body {
   margin-bottom: 4px;
 }
 
-.timer-selector {
+.timer-selector,
+.remover-selector {
   font-family: 'Courier New', monospace;
   color: var(--text-secondary);
   background: var(--bg-secondary);
@@ -515,9 +640,109 @@ body {
   color: var(--error-text);
 }
 
+/* Log Section */
+.log-section {
+  padding: 0;
+}
+
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.log-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.log-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.log-filters {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  flex-wrap: wrap;
+}
+
+.log-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.log-entry {
+  padding: 12px;
+  margin-bottom: 8px;
+  background: var(--bg-secondary);
+  border-left: 4px solid var(--border-color);
+  border-radius: 4px;
+}
+
+.log-entry.pending {
+  border-left-color: #2196F3;
+}
+
+.log-entry.success {
+  border-left-color: #4CAF50;
+}
+
+.log-entry.failure {
+  border-left-color: #f44336;
+}
+
+.log-entry.cancelled {
+  border-left-color: #FF9800;
+}
+
+.log-entry.updated {
+  border-left-color: #9C27B0;
+}
+
+.log-entry.removal {
+  border-left-color: #00BCD4;
+}
+
+.log-entry-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.log-entry-icon {
+  font-size: 16px;
+  margin-right: 6px;
+}
+
+.log-entry-title {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.log-entry-time {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.log-entry-details {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -533,7 +758,7 @@ body {
   background: #555;
 }
 
-/* Hide text entry fields initially (will be shown by JS) */
+/* Hide text entry fields initially */
 #text-entry-fields {
   display: block;
 }

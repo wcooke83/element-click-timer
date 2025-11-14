@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
-  "name": "Element Click Timer",
-  "version": "1.0.0",
-  "description": "Schedule automatic clicks on web page elements at specified times",
+  "name": "Element Action Scheduler",
+  "version": "3.0.0",
+  "description": "Schedule automatic actions on web page elements and manage persistent element removal",
   
   "permissions": [
     "tabs",
@@ -19,7 +19,7 @@
       "32": "icons/icon-32.png",
       "48": "icons/icon-48.png"
     },
-    "default_title": "Element Click Timer"
+    "default_title": "Element Action Scheduler"
   },
   
   "background": {
@@ -31,7 +31,8 @@
     {
       "matches": ["<all_urls>"],
       "js": ["content.js"],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ],
   

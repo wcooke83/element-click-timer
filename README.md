@@ -1,6 +1,6 @@
 # Element Click Timer
 
-A **cross-browser extension** (compatible with Chrome, Edge, and Firefox) that allows you to schedule automatic actions on specific web page elements at predefined times. Automate clicks, text entry, and more without manual intervention.
+- **cross-browser extension** (compatible with Chrome, Edge, and Firefox) that allows you to schedule automatic actions on specific web page elements at predefined times. Automate clicks, text entry, and more without manual intervention.
 
 ![Extension Preview](preview.png)  
 *(Screenshot of the popup interface showing timer management)*
